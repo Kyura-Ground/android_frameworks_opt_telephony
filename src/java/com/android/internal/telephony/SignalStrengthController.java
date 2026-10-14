@@ -526,16 +526,20 @@ public class SignalStrengthController extends Handler {
                                 (nrMeasurementEnabled & CellSignalStrengthNr.USE_SSSINR) != 0));
             }
 
-            int[] wcdmaEcnoThresholds = mCarrierConfig.getIntArray(
-                    CarrierConfigManager.KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY);
-            if (wcdmaEcnoThresholds != null) {
-                signalThresholdInfos.add(
-                        validateAndCreateSignalThresholdInfo(
-                                SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO,
-                                wcdmaEcnoThresholds,
-                                AccessNetworkThresholds.UTRAN_ECNO,
-                                AccessNetworkConstants.AccessNetworkType.UTRAN,
-                                false));
+            // ECNO criteria were introduced in AIDL network version 2.
+            if (mPhone.getHalVersion(HAL_SERVICE_NETWORK)
+                    .greaterOrEqual(RIL.RADIO_HAL_VERSION_2_1)) {
+                int[] wcdmaEcnoThresholds = mCarrierConfig.getIntArray(
+                        CarrierConfigManager.KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY);
+                if (wcdmaEcnoThresholds != null) {
+                    signalThresholdInfos.add(
+                            validateAndCreateSignalThresholdInfo(
+                                    SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO,
+                                    wcdmaEcnoThresholds,
+                                    AccessNetworkThresholds.UTRAN_ECNO,
+                                    AccessNetworkConstants.AccessNetworkType.UTRAN,
+                                    false));
+                }
             }
 
         }
@@ -604,12 +608,15 @@ public class SignalStrengthController extends Handler {
                             AccessNetworkThresholds.NGRAN_SSSINR,
                             AccessNetworkConstants.AccessNetworkType.NGRAN,
                             false));
-            signalThresholdInfos.add(
-                    createSignalThresholdsInfo(
-                            SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO,
-                            AccessNetworkThresholds.UTRAN_ECNO,
-                            AccessNetworkConstants.AccessNetworkType.UTRAN,
-                            false));
+            if (mPhone.getHalVersion(HAL_SERVICE_NETWORK)
+                    .greaterOrEqual(RIL.RADIO_HAL_VERSION_2_1)) {
+                signalThresholdInfos.add(
+                        createSignalThresholdsInfo(
+                                SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO,
+                                AccessNetworkThresholds.UTRAN_ECNO,
+                                AccessNetworkConstants.AccessNetworkType.UTRAN,
+                                false));
+            }
         }
 
         consolidatedAndSetReportingCriteria(signalThresholdInfos);

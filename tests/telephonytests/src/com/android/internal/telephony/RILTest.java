@@ -2666,6 +2666,72 @@ public class RILTest extends TelephonyTest {
                         .build());
     }
 
+    private SignalThresholdInfo ecnoSignalStrengthCriterion() {
+        return new SignalThresholdInfo.Builder()
+                .setRadioAccessNetworkType(AccessNetworkConstants.AccessNetworkType.UTRAN)
+                .setSignalMeasurementType(SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO)
+                .setThresholds(new int[] {-24, -14}, true)
+                .build();
+    }
+
+    @Test
+    public void testSignalStrengthCriteriaEcnoRequiresAidlV2() throws Exception {
+        for (Map<Integer, HalVersion> version : List.of(mHalVersionV14, mHalVersionV15,
+                mHalVersionV16, mHalVersionV20)) {
+            replaceInstance(RIL.class, "mHalVersion", mRILUnderTest, version);
+            doReturn(version == mHalVersionV20).when(mNetworkProxy).isAidl();
+            List<AsyncResult> results = new ArrayList<>();
+            mRILUnderTest.setSignalStrengthReportingCriteria(
+                    List.of(ecnoSignalStrengthCriterion()), signalStrengthResult(results));
+            mRILUnderTest.setSignalStrengthReportingCriteria(
+                    List.of(ecnoSignalStrengthCriterion()), null);
+            processAllMessages();
+            verify(mNetworkProxy, never()).setSignalStrengthReportingCriteria(anyInt(), any());
+            assertEquals(1, results.size());
+            assertEquals(CommandException.Error.REQUEST_NOT_SUPPORTED,
+                    ((CommandException) results.get(0).exception).getCommandError());
+            verifySignalStrengthRequestsCompleted();
+        }
+    }
+
+    @Test
+    public void testSignalStrengthCriteriaHidlEcnoDoesNotBlockRscp() throws Exception {
+        replaceInstance(RIL.class, "mHalVersion", mRILUnderTest, mHalVersionV15);
+        List<SignalThresholdInfo> criteria = List.of(ecnoSignalStrengthCriterion(),
+                new SignalThresholdInfo.Builder()
+                        .setRadioAccessNetworkType(AccessNetworkConstants.AccessNetworkType.UTRAN)
+                        .setSignalMeasurementType(SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_RSCP)
+                        .setThresholds(new int[] {-115, -105}, true)
+                        .build());
+        List<AsyncResult> results = new ArrayList<>();
+        mRILUnderTest.setSignalStrengthReportingCriteria(criteria, signalStrengthResult(results));
+        verify(mNetworkProxy).setSignalStrengthReportingCriteria(mSerialNumberCaptor.capture(),
+                eq(List.of(criteria.get(1))));
+        processAllMessages();
+        assertTrue(results.isEmpty());
+        respondToSignalStrengthCriteria(mSerialNumberCaptor.getValue(), RadioError.NONE);
+        assertEquals(1, results.size());
+        assertEquals(CommandException.Error.REQUEST_NOT_SUPPORTED,
+                ((CommandException) results.get(0).exception).getCommandError());
+        verifySignalStrengthRequestsCompleted();
+    }
+
+    @Test
+    public void testSignalStrengthCriteriaEcnoAidlV2KeepsBatch() throws Exception {
+        replaceInstance(RIL.class, "mHalVersion", mRILUnderTest, mHalVersionV21);
+        doReturn(true).when(mNetworkProxy).isAidl();
+        List<SignalThresholdInfo> criteria = new ArrayList<>(signalStrengthCriteria());
+        criteria.add(ecnoSignalStrengthCriterion());
+        List<AsyncResult> results = new ArrayList<>();
+        mRILUnderTest.setSignalStrengthReportingCriteria(criteria, signalStrengthResult(results));
+        verify(mNetworkProxy).setSignalStrengthReportingCriteria(mSerialNumberCaptor.capture(),
+                eq(criteria));
+        respondToSignalStrengthCriteriaAidl(mSerialNumberCaptor.getValue(), RadioError.NONE);
+        assertEquals(1, results.size());
+        assertNull(results.get(0).exception);
+        verifySignalStrengthRequestsCompleted();
+    }
+
     private Message signalStrengthResult(List<AsyncResult> results) {
         return new Handler(Looper.myLooper(), msg -> {
             results.add((AsyncResult) msg.obj);

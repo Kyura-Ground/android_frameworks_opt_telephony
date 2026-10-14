@@ -1763,6 +1763,46 @@ public class SignalStrengthControllerTest extends TelephonyTest {
         }
     }
 
+    @Test
+    public void testEcnoCriteriaNotSentToHidl() {
+        verifyEcnoCriteriaSupport(RIL.RADIO_HAL_VERSION_1_5, false);
+    }
+
+    @Test
+    public void testEcnoCriteriaNotSentToAidlV1() {
+        verifyEcnoCriteriaSupport(RIL.RADIO_HAL_VERSION_2_0, false);
+    }
+
+    @Test
+    public void testEcnoCriteriaSentToAidlV2() {
+        verifyEcnoCriteriaSupport(RIL.RADIO_HAL_VERSION_2_1, true);
+    }
+
+    private void verifyEcnoCriteriaSupport(HalVersion version, boolean supported) {
+        doReturn(version).when(mPhone).getHalVersion(HAL_SERVICE_NETWORK);
+        mBundle.putIntArray(CarrierConfigManager.KEY_WCDMA_ECNO_THRESHOLDS_INT_ARRAY,
+                new int[] {-24, -14, -6, 1});
+        Mockito.clearInvocations(mSimulatedCommandsVerifier);
+        sendCarrierConfigUpdate();
+        assertEcnoCriteriaPresence(supported);
+
+        Mockito.clearInvocations(mSimulatedCommandsVerifier);
+        mSsc.handleMessage(mSsc.obtainMessage(4 /* EVENT_RIL_CONNECTED */));
+        processAllMessages();
+        assertEcnoCriteriaPresence(supported);
+    }
+
+    private void assertEcnoCriteriaPresence(boolean supported) {
+        ArgumentCaptor<List<SignalThresholdInfo>> captor = ArgumentCaptor.forClass(List.class);
+        verify(mSimulatedCommandsVerifier).setSignalStrengthReportingCriteria(
+                captor.capture(), isNull());
+        List<SignalThresholdInfo> criteria = captor.getValue();
+        assertThat(criteria.stream().anyMatch(info -> info.getSignalMeasurementType()
+                == SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO)).isEqualTo(supported);
+        assertThat(criteria.stream().anyMatch(info -> info.getSignalMeasurementType()
+                == SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_RSCP)).isTrue();
+    }
+
     private void sendCarrierConfigUpdate() {
         CarrierConfigManager mockConfigManager = Mockito.mock(CarrierConfigManager.class);
         when(mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE))

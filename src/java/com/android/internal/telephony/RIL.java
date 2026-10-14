@@ -4071,6 +4071,15 @@ public class RIL extends BaseCommands implements CommandsInterface {
             return;
         }
 
+        // ECNO was added in AIDL network version 2; HIDL and AIDL version 1 lack it.
+        // Check after splitting HIDL lists so supported criteria can still complete.
+        if (signalThresholdInfos.stream().anyMatch(info -> info.getSignalMeasurementType()
+                == SignalThresholdInfo.SIGNAL_MEASUREMENT_TYPE_ECNO)
+                && !canMakeRequest("setSignalStrengthReportingCriteria ECNO", networkProxy, result,
+                        RADIO_HAL_VERSION_2_1)) {
+            return;
+        }
+
         RILRequest rr = obtainRequest(RIL_REQUEST_SET_SIGNAL_STRENGTH_REPORTING_CRITERIA, result,
                 mRILDefaultWorkSource);
 
